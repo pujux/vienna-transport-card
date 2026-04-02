@@ -1,11 +1,18 @@
-# 2 in one card
+# grouped per station+type
 type: custom:vienna-transport-card
-max_departures: 3
+max_departures: 4
+line_colors:
+  - U6: "#a4642c"
+  - 64A: "#1c60a7"
 entities:
-  - entity: sensor.wl_monitor_4620
+  - entity: sensor.wl_monitor_4632
     type: subway
-  - entity: sensor.wl_monitor_4918
+  - entity: sensor.wl_monitor_4637
     type: subway
+  - entity: sensor.wl_monitor_1866
+    type: bus
+  - entity: sensor.wl_monitor_1854
+    type: bus
 
 # optional filter by direction (if more than one line present for this stop)
 type: custom:vienna-transport-card
