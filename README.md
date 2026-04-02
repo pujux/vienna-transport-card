@@ -46,6 +46,7 @@ Cards oder Sections können nun mit custom yaml aus [example_lovelace.yaml](http
 - `max_departures` (Integer): Anzahl der Abfahrten, die pro konfigurierter Station angezeigt werden sollen.
   - Default: `3`
 - `entities` (Array): Liste der zu überwachenden Stationen.
+- `line_colors` (Array): Liste der Linien Farben (`U6: "#a4642c"`)
 
 #### Entity-Objekt
 
@@ -63,7 +64,3 @@ Jedes Element im entities-Array hat folgende Eigenschaften:
   - Default: `null` (keine Filterung)
 
 ## BEISPIELBILDER
-
-<img width="456" height="685" alt="WL_1" src="https://github.com/user-attachments/assets/5c86f18c-bab4-4190-bdf6-a22ce05367d0" />
-
-<img width="457" height="535" alt="WL_2" src="https://github.com/user-attachments/assets/b35c4ee3-fd8a-4b6d-85b5-42f66adb1c71" />
