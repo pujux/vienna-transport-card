@@ -1,7 +1,7 @@
 class ViennaTransportCard extends HTMLElement {
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
+    this.attachShadow({ mode: "open" });
     this._config = {};
     this._hass = null;
     this._prevFingerprints = {};
@@ -16,15 +16,23 @@ class ViennaTransportCard extends HTMLElement {
 
   setConfig(config) {
     if (!config.entities || !Array.isArray(config.entities)) {
-      throw new Error('You need to define at least one entity');
+      throw new Error("You need to define at least one entity");
     }
     this._config = {
       max_departures: config.max_departures || 3,
-      entities: config.entities.map(entity => 
-        typeof entity === 'string' 
-          ? { entity, type: 'bim' }
-          : { entity: entity.entity, type: entity.type || 'bim', direction: entity.direction || null, lines: entity.lines || null }
-      )
+      line_colors: Array.isArray(config.line_colors)
+        ? Object.assign({}, ...config.line_colors)
+        : config.line_colors || {},
+      entities: config.entities.map((entity) =>
+        typeof entity === "string"
+          ? { entity, type: "bim" }
+          : {
+              entity: entity.entity,
+              type: entity.type || "bim",
+              direction: entity.direction || null,
+              lines: entity.lines || null,
+            }
+      ),
     };
     this._prevFingerprints = {};
     this._updateView();
@@ -38,22 +46,35 @@ class ViennaTransportCard extends HTMLElement {
     for (const eCfg of this._config.entities) {
       const state = hass.states[eCfg.entity];
       if (!state) {
-        if (this._prevFingerprints[eCfg.entity] !== '__MISSING__') changed = true;
-        newFingerprints[eCfg.entity] = '__MISSING__';
+        if (this._prevFingerprints[eCfg.entity] !== "__MISSING__")
+          changed = true;
+        newFingerprints[eCfg.entity] = "__MISSING__";
         continue;
       }
 
       const attrs = state.attributes || {};
-      const departures = Array.isArray(attrs.departures) ? attrs.departures : [];
-      const trafficInfo = Array.isArray(attrs.traffic_info) ? attrs.traffic_info : [];
-      
-      const depFingerprint = departures.slice(0, this._config.max_departures)
-        .map(d => `${d.line}|${d.direction}|${d.countdown}|${d.time_real}|${d.time_planned}|${d.disturbances?.length || 0}`)
-        .join(';;');
-      
-      const trafficFingerprint = trafficInfo.map(t => `${t.id || t.title}|${t.priority}`).join(';;');
+      const departures = Array.isArray(attrs.departures)
+        ? attrs.departures
+        : [];
+      const trafficInfo = Array.isArray(attrs.traffic_info)
+        ? attrs.traffic_info
+        : [];
+
+      const depFingerprint = departures
+        .slice(0, this._config.max_departures)
+        .map(
+          (d) =>
+            `${d.line}|${d.direction}|${d.countdown}|${d.time_real}|${
+              d.time_planned
+            }|${d.disturbances?.length || 0}`
+        )
+        .join(";;");
+
+      const trafficFingerprint = trafficInfo
+        .map((t) => `${t.id || t.title}|${t.priority}`)
+        .join(";;");
       const fingerprint = `${attrs.stop_id}||${depFingerprint}||${trafficFingerprint}`;
-      
+
       newFingerprints[eCfg.entity] = fingerprint;
       if (this._prevFingerprints[eCfg.entity] !== fingerprint) changed = true;
     }
@@ -74,139 +95,266 @@ class ViennaTransportCard extends HTMLElement {
   }
 
   _attachEventListeners() {
-    this.shadowRoot.querySelectorAll('.station-disturbances').forEach(element => {
-      element.addEventListener('click', () => {
-        const entity = element.dataset.entity;
-        const content = element.querySelector('.station-disturbances-content');
-        const chevron = element.querySelector('.station-disturbances-header ha-icon:last-child');
-        const nowShown = content.style.display === 'block';
-        
-        content.style.display = nowShown ? 'none' : 'block';
-        if (chevron) chevron.setAttribute('icon', nowShown ? 'mdi:chevron-down' : 'mdi:chevron-up');
-        this._expanded.station[entity] = !nowShown;
-      });
-    });
+    this.shadowRoot
+      .querySelectorAll(".station-disturbances")
+      .forEach((element) => {
+        element.addEventListener("click", () => {
+          const entity = element.dataset.entity;
+          const content = element.querySelector(
+            ".station-disturbances-content"
+          );
+          const chevron = element.querySelector(
+            ".station-disturbances-header ha-icon:last-child"
+          );
+          const nowShown = content.style.display === "block";
 
-    this.shadowRoot.querySelectorAll('.disturbance-indicator').forEach(indicator => {
-      indicator.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const key = `${indicator.dataset.entity}-${indicator.dataset.index}`;
-        const details = this.shadowRoot.querySelector(`[data-disturbance="${key}"]`);
-        
-        if (details) {
-          const nowShown = details.style.display === 'block';
-          details.style.display = nowShown ? 'none' : 'block';
-          this._expanded.details[key] = !nowShown;
-        }
+          content.style.display = nowShown ? "none" : "block";
+          if (chevron)
+            chevron.setAttribute(
+              "icon",
+              nowShown ? "mdi:chevron-down" : "mdi:chevron-up"
+            );
+          this._expanded.station[entity] = !nowShown;
+        });
       });
-    });
+
+    this.shadowRoot
+      .querySelectorAll(".disturbance-indicator")
+      .forEach((indicator) => {
+        indicator.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const key = `${indicator.dataset.entity}-${indicator.dataset.index}`;
+          const details = this.shadowRoot.querySelector(
+            `[data-disturbance="${key}"]`
+          );
+
+          if (details) {
+            const nowShown = details.style.display === "block";
+            details.style.display = nowShown ? "none" : "block";
+            this._expanded.details[key] = !nowShown;
+          }
+        });
+      });
   }
 
   _generateStopCards() {
-    if (!this._config.entities?.length) return '<div class="error">No entities configured</div>';
+    if (!this._config.entities?.length)
+      return '<div class="error">No entities configured</div>';
 
-    return this._config.entities.map(entityConfig => {
+    // Group entities by (stop_name, type)
+    const groups = new Map();
+    for (const entityConfig of this._config.entities) {
       const entity = this._hass.states[entityConfig.entity];
-      if (!entity) {
-        return `
-          <div class="line-card error">
-            <div class="error-message">
-              <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-              <span>Entity ${entityConfig.entity} not found</span>
+      const stop_name = entity?.attributes?.stop_name || entityConfig.entity;
+      const type = entityConfig.type || "bim";
+      const key = `${stop_name}||${type}`;
+      if (!groups.has(key)) {
+        groups.set(key, { stop_name, type, entries: [] });
+      }
+      groups.get(key).entries.push({ entityConfig, entity });
+    }
+
+    return [...groups.values()]
+      .map((group) => {
+        const { stop_name, type, entries } = group;
+
+        // If all entities in the group are missing, show errors
+        const allMissing = entries.every((e) => !e.entity);
+        if (allMissing) {
+          return entries
+            .map(
+              ({ entityConfig }) => `
+            <div class="line-card error">
+              <div class="error-message">
+                <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
+                <span>Entity ${entityConfig.entity} not found</span>
+              </div>
             </div>
-          </div>
-        `;
-      }
+          `
+            )
+            .join("");
+        }
 
-      const { stop_name = 'Unknown Stop', departures = [], traffic_info = [], stop_id } = entity.attributes;
-      
-      let filteredDepartures = departures;
-      if (entityConfig.direction) {
-        filteredDepartures = filteredDepartures.filter(dep => dep.direction === entityConfig.direction);
-      }
-      if (entityConfig.lines?.length) {
-        filteredDepartures = filteredDepartures.filter(dep => entityConfig.lines.includes(dep.line));
-      }
+        // Merge departures from all entities, tagging each with its source
+        let allDepartures = [];
+        let allDisturbances = [];
 
-      const stationDisturbances = traffic_info.filter(info => info.related_stops?.includes(stop_id));
-      const stationExpanded = !!this._expanded.station[entityConfig.entity];
-      
-      const filterBadges = [
-        entityConfig.direction && `<span class="filter-badge direction-filter" title="Direction filter active">→ ${entityConfig.direction}</span>`,
-        entityConfig.lines?.length && `<span class="filter-badge lines-filter" title="Lines filter active">Lines: ${entityConfig.lines.join(', ')}</span>`
-      ].filter(Boolean).join('');
+        for (const { entityConfig, entity } of entries) {
+          if (!entity) continue;
+          const {
+            departures = [],
+            traffic_info = [],
+            stop_id,
+          } = entity.attributes;
 
-      return `
+          let filtered = departures;
+          if (entityConfig.direction) {
+            filtered = filtered.filter(
+              (dep) => dep.direction === entityConfig.direction
+            );
+          }
+          if (entityConfig.lines?.length) {
+            filtered = filtered.filter((dep) =>
+              entityConfig.lines.includes(dep.line)
+            );
+          }
+
+          filtered.forEach((dep, idx) => {
+            allDepartures.push({
+              ...dep,
+              _entityId: entityConfig.entity,
+              _index: idx,
+            });
+          });
+
+          const stationDisturbances = traffic_info.filter((info) =>
+            info.related_stops?.includes(stop_id)
+          );
+          allDisturbances.push(...stationDisturbances);
+        }
+
+        // Sort by countdown, then take max_departures
+        allDepartures.sort((a, b) => (a.countdown || 0) - (b.countdown || 0));
+        const departuresToShow = allDepartures.slice(
+          0,
+          this._config.max_departures
+        );
+
+        // Deduplicate disturbances by id/title
+        const seen = new Set();
+        allDisturbances = allDisturbances.filter((d) => {
+          const k = d.id || d.title;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+
+        // Use first valid entity as key for expand state
+        const primaryEntityId = entries.find((e) => e.entity)?.entityConfig
+          .entity;
+        const stationExpanded = !!this._expanded.station[primaryEntityId];
+
+        return `
         <div class="line-card">
           <div class="line-header">
             <div class="line-title">
-              <div class="line-icon ${entityConfig.type || 'bus'}"></div>
+              <div class="line-icon ${type}"></div>
               <span class="line-name">${stop_name}</span>
-              ${filterBadges}
             </div>
           </div>
-          ${stationDisturbances.length ? `
-            <div class="station-disturbances" data-entity="${entityConfig.entity}">
+          ${
+            allDisturbances.length
+              ? `
+            <div class="station-disturbances" data-entity="${primaryEntityId}">
               <div class="station-disturbances-header">
                 <ha-icon icon="mdi:alert-circle"></ha-icon>
-                <span>${stationDisturbances.length} station disturbance(s)</span>
-                <ha-icon icon="${stationExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down'}"></ha-icon>
+                <span>${allDisturbances.length} station disturbance(s)</span>
+                <ha-icon icon="${
+                  stationExpanded ? "mdi:chevron-up" : "mdi:chevron-down"
+                }"></ha-icon>
               </div>
-              <div class="station-disturbances-content" style="display: ${stationExpanded ? 'block' : 'none'};">
-                ${stationDisturbances.map(info => `
-                  <div class="disturbance-details ${info.priority === 'high' ? 'high-priority' : ''}">
+              <div class="station-disturbances-content" style="display: ${
+                stationExpanded ? "block" : "none"
+              };">
+                ${allDisturbances
+                  .map(
+                    (info) => `
+                  <div class="disturbance-details ${
+                    info.priority === "high" ? "high-priority" : ""
+                  }">
                     <div class="disturbance-title">${info.title}</div>
-                    <div class="disturbance-description">${info.description}</div>
+                    <div class="disturbance-description">${
+                      info.description
+                    }</div>
                   </div>
-                `).join('')}
+                `
+                  )
+                  .join("")}
               </div>
             </div>
-          ` : ''}
+          `
+              : ""
+          }
           <div class="departures">
-            ${filteredDepartures.length ? 
-              filteredDepartures.slice(0, this._config.max_departures).map((dep, index) => 
-                this._generateDepartureItem(dep, index, entityConfig.entity)
-              ).join('') :
-              '<div class="no-departures">No departures matching the filter criteria</div>'
+            ${
+              departuresToShow.length
+                ? departuresToShow
+                    .map((dep) =>
+                      this._generateDepartureItem(
+                        dep,
+                        dep._index,
+                        dep._entityId
+                      )
+                    )
+                    .join("")
+                : '<div class="no-departures">No departures matching the filter criteria</div>'
             }
           </div>
         </div>
       `;
-    }).join('');
+      })
+      .join("");
   }
 
   _generateDepartureItem(dep, index, entityId) {
     const hasDisturbances = dep.disturbances?.length > 0;
-    const highPriority = hasDisturbances && dep.disturbances.some(d => d.priority === 'high');
+    const highPriority =
+      hasDisturbances && dep.disturbances.some((d) => d.priority === "high");
     const detailKey = `${entityId}-${index}`;
     const detailsExpanded = !!this._expanded.details[detailKey];
     const foldingRamp = dep.folding_ramp || dep.foldingRamp;
 
     return `
       <div class="departure-item">
-        <div class="line-number">${dep.line}</div>
+        <div class="line-number" data-line="${dep.line}">${dep.line}</div>
         <div class="departure-details">
           <div class="direction">
             ${dep.direction}
-            ${dep.barrier_free ? '<ha-icon class="barrier-free-icon" icon="mdi:wheelchair-accessibility"></ha-icon>' : ''}
-            ${foldingRamp ? '<ha-icon class="ac-icon folding-ramp-icon" icon="mdi:snowflake" title="Air conditioning"></ha-icon>' : ''}
-            ${hasDisturbances ? `
+            ${
+              dep.barrier_free
+                ? '<ha-icon class="barrier-free-icon" icon="mdi:wheelchair-accessibility"></ha-icon>'
+                : ""
+            }
+            ${
+              foldingRamp
+                ? '<ha-icon class="ac-icon folding-ramp-icon" icon="mdi:snowflake" title="Air conditioning"></ha-icon>'
+                : ""
+            }
+            ${
+              hasDisturbances
+                ? `
               <span class="disturbance-indicator" data-entity="${entityId}" data-index="${index}">
-                <ha-icon class="disturbance-icon ${highPriority ? 'high-priority' : ''}" 
-                         icon="mdi:alert${highPriority ? '' : '-circle-outline'}"></ha-icon>
+                <ha-icon class="disturbance-icon ${
+                  highPriority ? "high-priority" : ""
+                }" 
+                         icon="mdi:alert${
+                           highPriority ? "" : "-circle-outline"
+                         }"></ha-icon>
               </span>
-            ` : ''}
+            `
+                : ""
+            }
           </div>
-          ${hasDisturbances ? `
-            <div class="disturbance-details-content ${highPriority ? 'high-priority' : ''}"
+          ${
+            hasDisturbances
+              ? `
+            <div class="disturbance-details-content ${
+              highPriority ? "high-priority" : ""
+            }"
                  data-disturbance="${detailKey}"
-                 style="display: ${detailsExpanded ? 'block' : 'none'};">
-              ${dep.disturbances.map(dist => `
+                 style="display: ${detailsExpanded ? "block" : "none"};">
+              ${dep.disturbances
+                .map(
+                  (dist) => `
                 <div class="disturbance-title">${dist.title}</div>
                 <div class="disturbance-description">${dist.description}</div>
-              `).join('')}
+              `
+                )
+                .join("")}
             </div>
-          ` : ''}
+          `
+              : ""
+          }
         </div>
         <div class="countdown">${dep.countdown} min</div>
       </div>
@@ -241,11 +389,7 @@ class ViennaTransportCard extends HTMLElement {
 
       .line-card {
         margin-bottom: 12px;
-        padding: 12px;
-        border-radius: var(--ha-card-border-radius, 10px);
-        background: var(--primary-background-color, rgba(255, 255, 255, 0.04));
         transition: background-color 0.3s ease;
-        border: 1px solid var(--vt-divider);
       }
 
       .line-card.error { background: rgba(244, 67, 54, 0.1); }
@@ -255,8 +399,6 @@ class ViennaTransportCard extends HTMLElement {
         display: flex;
         align-items: center;
         margin-bottom: 10px;
-        padding: 8px 0;
-        border-bottom: 1px solid var(--vt-divider);
       }
 
       .line-title {
@@ -318,8 +460,8 @@ class ViennaTransportCard extends HTMLElement {
       }
 
       .line-icon.subway {
-        -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8.5,15A1,1 0 0,1 9.5,16A1,1 0 0,1 8.5,17A1,1 0 0,1 7.5,16A1,1 0 0,1 8.5,15M7,9H17V14H7V9M15.5,15A1,1 0 0,1 16.5,16A1,1 0 0,1 15.5,17A1,1 0 0,1 14.5,16A1,1 0 0,1 15.5,15M18,15.88V9C18,6.38 15.32,6 12,6C9,6 6,6.37 6,9V15.88A2.62,2.62 0 0,0 8.62,18.5L7.5,19.62V20H9.17L10.67,18.5H13.5L15,20H16.5V19.62L15.37,18.5C16.82,18.5 18,17.33 18,15.88M17.8,2.8C20.47,3.84 22,6.05 22,8.86V22H2V8.86C2,6.05 3.53,3.84 6.2,2.8C8,2.09 10.14,2 12,2C13.86,2 16,2.09 17.8,2.8Z" /></svg>');
-        mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8.5,15A1,1 0 0,1 9.5,16A1,1 0 0,1 8.5,17A1,1 0 0,1 7.5,16A1,1 0 0,1 8.5,15M7,9H17V14H7V9M15.5,15A1,1 0 0,1 16.5,16A1,1 0 0,1 15.5,17A1,1 0 0,1 14.5,16A1,1 0 0,1 15.5,15M18,15.88V9C18,6.38 15.32,6 12,6C9,6 6,6.37 6,9V15.88A2.62,2.62 0 0,0 8.62,18.5L7.5,19.62V20H9.17L10.67,18.5H13.5L15,20H16.5V19.62L15.37,18.5C16.82,18.5 18,17.33 18,15.88M17.8,2.8C20.47,3.84 22,6.05 22,8.86V22H2V8.86C2,6.05 3.53,3.84 6.2,2.8C8,2.09 10.14,2 12,2C13.86,2 16,2.09 17.8,2.8Z" /></svg>');
+        -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path class="primary-path" d="M18,11H13V6H18M16.5,17A1.5,1.5 0 0,1 15,15.5A1.5,1.5 0 0,1 16.5,14A1.5,1.5 0 0,1 18,15.5A1.5,1.5 0 0,1 16.5,17M11,11H6V6H11M7.5,17A1.5,1.5 0 0,1 6,15.5A1.5,1.5 0 0,1 7.5,14A1.5,1.5 0 0,1 9,15.5A1.5,1.5 0 0,1 7.5,17M12,2C7.58,2 4,2.5 4,6V15.5A3.5,3.5 0 0,0 7.5,19L6,20.5V21H18V20.5L16.5,19A3.5,3.5 0 0,0 20,15.5V6C20,2.5 16.42,2 12,2Z"/></svg>');
+        mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path class="primary-path" d="M18,11H13V6H18M16.5,17A1.5,1.5 0 0,1 15,15.5A1.5,1.5 0 0,1 16.5,14A1.5,1.5 0 0,1 18,15.5A1.5,1.5 0 0,1 16.5,17M11,11H6V6H11M7.5,17A1.5,1.5 0 0,1 6,15.5A1.5,1.5 0 0,1 7.5,14A1.5,1.5 0 0,1 9,15.5A1.5,1.5 0 0,1 7.5,17M12,2C7.58,2 4,2.5 4,6V15.5A3.5,3.5 0 0,0 7.5,19L6,20.5V21H18V20.5L16.5,19A3.5,3.5 0 0,0 20,15.5V6C20,2.5 16.42,2 12,2Z"/></svg>');
       }
 
       .error-message {
@@ -346,20 +488,23 @@ class ViennaTransportCard extends HTMLElement {
         text-align: center;
       }
 
+      ${Object.entries(this._config.line_colors || {})
+        .map(
+          ([line, color]) =>
+            `.line-number[data-line="${CSS.escape(
+              line
+            )}"] { background: ${color}; }`
+        )
+        .join("\n      ")}
+
       .departure-item {
         display: grid;
         grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: 10px;
-        padding: 8px 10px;
+        padding: 8px 0px;
         margin-bottom: 6px;
-        border-radius: 6px;
-        background: var(--primary-background-color, rgba(255, 255, 255, 0.05));
         transition: background-color 0.2s ease-in-out;
-      }
-
-      .departure-item:hover {
-        background: var(--secondary-background-color, rgba(255, 255, 255, 0.1));
       }
 
       .departure-details { min-width: 0; }
@@ -434,15 +579,9 @@ class ViennaTransportCard extends HTMLElement {
       .disturbance-icon {
         color: var(--vt-warning);
         --mdc-icon-size: 18px;
-        animation: pulse 2s infinite;
       }
 
       .disturbance-icon.high-priority { color: var(--vt-error); }
-
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.6; }
-      }
 
       .disturbance-details-content {
         margin-top: 8px;
@@ -474,14 +613,15 @@ class ViennaTransportCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { title: 'Vienna Transport', max_departures: 3, entities: [] };
+    return { title: "Vienna Transport", max_departures: 3, entities: [] };
   }
 }
 
-customElements.define('vienna-transport-card', ViennaTransportCard);
+customElements.define("vienna-transport-card", ViennaTransportCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: 'vienna-transport-card',
-  name: 'Vienna Transport Card',
-  description: 'Display real-time Vienna public transport departures from WL Monitor sensors'
+  type: "vienna-transport-card",
+  name: "Vienna Transport Card",
+  description:
+    "Display real-time Vienna public transport departures from WL Monitor sensors",
 });
