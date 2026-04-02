@@ -64,3 +64,7 @@ Jedes Element im entities-Array hat folgende Eigenschaften:
   - Default: `null` (keine Filterung)
 
 ## BEISPIELBILDER
+
+<img width="450" height="502" alt="image" src="https://github.com/user-attachments/assets/2248de28-cb2b-4b90-a1d4-16ca72cd3f94" />
+
+
