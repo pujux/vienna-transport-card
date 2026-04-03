@@ -213,12 +213,21 @@ class ViennaTransportCard extends HTMLElement {
           allDisturbances.push(...stationDisturbances);
         }
 
-        // Sort by countdown, then take max_departures
+        // Sort by countdown, group by (line, direction), limit countdowns per group
         allDepartures.sort((a, b) => (a.countdown || 0) - (b.countdown || 0));
-        const departuresToShow = allDepartures.slice(
-          0,
-          this._config.max_departures
-        );
+        const groupMap = new Map();
+        for (const dep of allDepartures) {
+          const key = `${dep.line}||${dep.direction}`;
+          if (!groupMap.has(key)) {
+            groupMap.set(key, { ...dep, _countdowns: [dep.countdown] });
+          } else {
+            const group = groupMap.get(key);
+            if (group._countdowns.length < this._config.max_departures) {
+              group._countdowns.push(dep.countdown);
+            }
+          }
+        }
+        const departuresToShow = [...groupMap.values()];
 
         // Deduplicate disturbances by id/title
         const seen = new Set();
@@ -356,7 +365,9 @@ class ViennaTransportCard extends HTMLElement {
               : ""
           }
         </div>
-        <div class="countdown">${dep.countdown} min</div>
+        <div class="countdown">${(dep._countdowns || [dep.countdown]).join(
+          " | "
+        )} min</div>
       </div>
     `;
   }
@@ -525,7 +536,6 @@ class ViennaTransportCard extends HTMLElement {
 
       .barrier-free-icon {
         color: var(--vt-secondary-text);
-        opacity: 0.4;
         --mdc-icon-size: 16px;
       }
 
